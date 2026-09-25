@@ -78,6 +78,7 @@ func New(cfg config.Config, redisClient *redis.Client, auth *service.AuthService
 	planReview.Use(middleware.RequireRoles("admin", "manager"))
 	planReview.PATCH("/:id/approve", h.Plans.Approve)
 	planReview.PATCH("/:id/revoke", h.Plans.Revoke)
+	planReview.PATCH("/:id/finish", h.Plans.Finish)
 	planReview.DELETE("/:id", h.Plans.Delete)
 
 	protected.GET("/executions", h.Executions.List)

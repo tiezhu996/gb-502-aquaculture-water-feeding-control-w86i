@@ -50,13 +50,6 @@ func (r *ExecutionRepository) GetForUpdate(id uint) (model.ControlExecution, err
 	return execution, err
 }
 
-func (r *ExecutionRepository) CountOpenForPlanExcluding(planID, excludedID uint) (int64, error) {
-	var count int64
-	err := r.db.Model(&model.ControlExecution{}).
-		Where("feeding_plan_id = ? AND id <> ? AND status IN ?", planID, excludedID, []string{"scheduled", "running"}).Count(&count).Error
-	return count, err
-}
-
 func (r *ExecutionRepository) PlannedAmountForDay(pondID uint, from, until time.Time, excludedID uint) (float64, error) {
 	var total float64
 	err := r.db.Model(&model.ControlExecution{}).

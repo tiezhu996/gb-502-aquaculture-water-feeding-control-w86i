@@ -135,3 +135,17 @@ func TestExecutionStatusCannotMoveBackToScheduled(t *testing.T) {
 		t.Fatal("completed execution must be terminal")
 	}
 }
+
+func TestPlanStatusActiveWindow(t *testing.T) {
+	if !constants.PlanStatusExecuting.Valid() {
+		t.Fatal("executing must be a valid plan status")
+	}
+	if !constants.PlanStatusApproved.Active() || !constants.PlanStatusExecuting.Active() {
+		t.Fatal("approved and executing plans must stay schedulable within the period")
+	}
+	for _, status := range []constants.PlanStatus{constants.PlanStatusDraft, constants.PlanStatusPending, constants.PlanStatusExecuted} {
+		if status.Active() {
+			t.Fatalf("status %q must not be active for scheduling", status)
+		}
+	}
+}

@@ -1,5 +1,5 @@
 export type PondStatus = 'active' | 'quarantine' | 'closed'
-export type PlanStatus = 'draft' | 'pending' | 'approved' | 'executed'
+export type PlanStatus = 'draft' | 'pending' | 'approved' | 'executing' | 'executed'
 export type RiskLevel = 'normal' | 'warning' | 'critical'
 export type ExecutionStatus = 'scheduled' | 'running' | 'completed' | 'cancelled'
 export type UserRole = 'admin' | 'manager' | 'operator' | 'viewer'
@@ -14,6 +14,7 @@ export const planStatusLabels: Record<PlanStatus, string> = {
   draft: '草稿',
   pending: '待审核',
   approved: '已批准',
+  executing: '执行中',
   executed: '已执行',
 }
 

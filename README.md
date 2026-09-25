@@ -6,9 +6,9 @@
 
 - 养殖池工作台：管理品种、容量、生长阶段和运行/隔离/关闭状态。
 - 水质风险：录入溶解氧、水温、pH、氨氮和浊度，自动判定正常/预警/严重并要求人工确认异常。
-- 投喂计划：草稿修订自动升版，支持提交、批准和撤销；批准时会校验水质与溶解氧阈值。
+- 投喂计划：草稿修订自动升版，支持提交、批准、结束和撤销；批准时会校验水质与溶解氧阈值，且同一养殖池只允许一个生效中的计划。
 - 投喂建议：结合已批准计划、24 小时内水质、天气和生长阶段，输出正常投喂、减量或暂停。
-- 执行反馈：仅允许已批准计划进入执行，记录实际量、现场溶解氧与反馈。
+- 执行反馈：仅允许生效中（已批准/执行中）计划进入执行，记录实际量、现场溶解氧与反馈。
 - 安全与审计：JWT、RBAC、请求 ID、全局异常恢复、Redis 限流和实体变更前后快照。
 
 ## 快速启动
@@ -52,7 +52,7 @@ docker compose down
 2. 在“水质读数”录入当前指标；如判定异常，先进行现场复核和确认。
 3. 在“投喂计划”创建草稿并提交，主管检查最新水质后批准。
 4. 已批准计划可输入天气窗口生成实时投喂建议。
-5. 在“执行反馈”安排、开始并提交实际结果。完成后计划进入 `executed`。
+5. 在“执行反馈”安排、开始并提交实际结果。首次完成后计划进入 `executing`，周期内可继续安排投喂；主管在计划页点击“结束”后才归档为 `executed`。
 6. 管理员或主管可在“操作审计”查看人员、原因、请求 ID 和变更快照。
 
 ## 项目结构
@@ -79,7 +79,7 @@ docker compose down
 
 - Go：`backend/internal/constants/enums.go`
   - `PondStatus`: `active` / `quarantine` / `closed`
-  - `PlanStatus`: `draft` / `pending` / `approved` / `executed`
+  - `PlanStatus`: `draft` / `pending` / `approved` / `executing` / `executed`
   - `RiskLevel`、`ExecutionStatus`、`Role`
 - TypeScript：`frontend/src/types/enums.ts`
   - 与 Go 取值一致，同时提供界面文案映射。
@@ -107,6 +107,7 @@ docker compose down
 | `PATCH` | `/api/plans/:id/submit` | 草稿提交审核 |
 | `PATCH` | `/api/plans/:id/approve` | 主管批准并校验水质 |
 | `PATCH` | `/api/plans/:id/revoke` | 撤销待审或已批准计划 |
+| `PATCH` | `/api/plans/:id/finish` | 主管结束生效中的计划，归档为已执行 |
 | `GET` | `/api/plans/recommendation?pondId=1&weather=晴朗` | 生成投喂建议 |
 | `GET/POST` | `/api/executions` | 执行记录列表/安排 |
 | `PATCH` | `/api/executions/:id/complete` | 提交实际数量与反馈 |
@@ -145,6 +146,8 @@ docker compose config --quiet
 - 关闭养殖池不接受新水质读数或投喂计划。
 - 草稿每次编辑版本号加一；非草稿不能直接编辑。
 - 计划批准需要运行中养殖池和最新水质，溶解氧不得低于计划阈值。
+- 同一养殖池同一时间只能有一个生效中（已批准/执行中）的计划；批准第二个计划会被拒绝，需先结束或撤销原计划。
+- 投喂反馈完成后计划保持 `executing` 并继续接受安排，主管手动结束后才进入 `executed`。
 - 执行安排需要 24 小时内水质，严重异常或溶解氧不足会阻断流程。
 - 实际量与计划量偏差超过 25% 时，必须提供至少 10 个字的说明。
 - 关联了读数、计划或执行记录的养殖池不允许删除。

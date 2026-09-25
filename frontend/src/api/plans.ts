@@ -14,7 +14,7 @@ export const planApi = {
     const response = await client.put<ApiEnvelope<FeedingPlan>>(`/plans/${id}`, input)
     return response.data.data
   },
-  async transition(id: number, action: 'submit' | 'approve' | 'revoke', reason: string) {
+  async transition(id: number, action: 'submit' | 'approve' | 'revoke' | 'finish', reason: string) {
     const response = await client.patch<ApiEnvelope<FeedingPlan>>(`/plans/${id}/${action}`, { reason })
     return response.data.data
   },

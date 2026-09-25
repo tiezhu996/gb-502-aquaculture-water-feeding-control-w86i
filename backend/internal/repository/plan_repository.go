@@ -67,8 +67,14 @@ func (r *PlanRepository) ExecutionCount(id uint) (int64, error) {
 	return count, err
 }
 
-func (r *PlanRepository) LatestApprovedForPond(pondID uint) (model.FeedingPlan, error) {
+func (r *PlanRepository) LatestActiveForPond(pondID uint, excludeID uint) (model.FeedingPlan, error) {
 	var plan model.FeedingPlan
-	err := r.db.Preload("Pond").Where("pond_id = ? AND status = ?", pondID, "approved").Order("version DESC, updated_at DESC").First(&plan).Error
+	err := r.db.Preload("Pond").Where("pond_id = ? AND id <> ? AND status IN ?", pondID, excludeID, []string{"approved", "executing"}).Order("version DESC, updated_at DESC").First(&plan).Error
 	return plan, err
+}
+
+func (r *PlanRepository) OpenExecutionCount(planID uint) (int64, error) {
+	var count int64
+	err := r.db.Model(&model.ControlExecution{}).Where("feeding_plan_id = ? AND status IN ?", planID, []string{"scheduled", "running"}).Count(&count).Error
+	return count, err
 }

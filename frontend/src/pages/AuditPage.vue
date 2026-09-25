@@ -37,7 +37,7 @@ function entityLabel(value: string) {
 }
 
 function actionLabel(value: string) {
-  return ({ create: '创建', update: '更新', delete: '删除', confirm: '确认异常', revise: '版本修订', submit: '提交', approve: '批准', revoke: '撤销', schedule: '安排执行', complete: '完成反馈', execute: '计划执行' } as Record<string, string>)[value] || value
+  return ({ create: '创建', update: '更新', delete: '删除', confirm: '确认异常', revise: '版本修订', submit: '提交', approve: '批准', revoke: '撤销', finish: '结束计划', schedule: '安排执行', complete: '完成反馈', execute: '计划执行' } as Record<string, string>)[value] || value
 }
 
 function pretty(value: string) {
@@ -62,7 +62,7 @@ onMounted(load)
         <div class="filters audit-filters">
           <el-input v-model="params.search" clearable placeholder="搜索操作人或原因" :prefix-icon="Search" />
           <el-select v-model="params.entityType" placeholder="全部实体" clearable><el-option label="养殖池" value="pond" /><el-option label="水质读数" value="water_reading" /><el-option label="投喂计划" value="feeding_plan" /><el-option label="执行记录" value="control_execution" /></el-select>
-          <el-select v-model="params.action" placeholder="全部操作" clearable><el-option label="创建" value="create" /><el-option label="更新" value="update" /><el-option label="批准" value="approve" /><el-option label="撤销" value="revoke" /><el-option label="完成反馈" value="complete" /><el-option label="删除" value="delete" /></el-select>
+          <el-select v-model="params.action" placeholder="全部操作" clearable><el-option label="创建" value="create" /><el-option label="更新" value="update" /><el-option label="批准" value="approve" /><el-option label="撤销" value="revoke" /><el-option label="结束计划" value="finish" /><el-option label="完成反馈" value="complete" /><el-option label="删除" value="delete" /></el-select>
         </div>
       </div>
       <el-table v-loading="loading" :data="logs" stripe empty-text="暂无审计记录">

@@ -30,14 +30,20 @@ func (s PondStatus) Valid() bool {
 type PlanStatus string
 
 const (
-	PlanStatusDraft    PlanStatus = "draft"
-	PlanStatusPending  PlanStatus = "pending"
-	PlanStatusApproved PlanStatus = "approved"
-	PlanStatusExecuted PlanStatus = "executed"
+	PlanStatusDraft     PlanStatus = "draft"
+	PlanStatusPending   PlanStatus = "pending"
+	PlanStatusApproved  PlanStatus = "approved"
+	PlanStatusExecuting PlanStatus = "executing"
+	PlanStatusExecuted  PlanStatus = "executed"
 )
 
 func (s PlanStatus) Valid() bool {
-	return s == PlanStatusDraft || s == PlanStatusPending || s == PlanStatusApproved || s == PlanStatusExecuted
+	return s == PlanStatusDraft || s == PlanStatusPending || s == PlanStatusApproved || s == PlanStatusExecuting || s == PlanStatusExecuted
+}
+
+// Active 表示计划处于生效窗口：已批准或执行中，周期内均可继续安排投喂。
+func (s PlanStatus) Active() bool {
+	return s == PlanStatusApproved || s == PlanStatusExecuting
 }
 
 type Role string
