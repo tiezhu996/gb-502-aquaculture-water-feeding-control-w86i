@@ -67,8 +67,21 @@ func (r *PlanRepository) ExecutionCount(id uint) (int64, error) {
 	return count, err
 }
 
-func (r *PlanRepository) LatestApprovedForPond(pondID uint) (model.FeedingPlan, error) {
+func (r *PlanRepository) OpenExecutionCount(id uint) (int64, error) {
+	var count int64
+	err := r.db.Model(&model.ControlExecution{}).
+		Where("feeding_plan_id = ? AND status IN ?", id, []string{"scheduled", "running"}).Count(&count).Error
+	return count, err
+}
+
+// ActiveForPond returns the plan currently in effect for a pond: approved plans
+// can already be scheduled, while executing plans have feedings underway and
+// take precedence. There must be at most one such plan per pond at any time.
+func (r *PlanRepository) ActiveForPond(pondID uint) (model.FeedingPlan, error) {
 	var plan model.FeedingPlan
-	err := r.db.Preload("Pond").Where("pond_id = ? AND status = ?", pondID, "approved").Order("version DESC, updated_at DESC").First(&plan).Error
+	err := r.db.Preload("Pond").
+		Where("pond_id = ? AND status IN ?", pondID, []string{"executing", "approved"}).
+		Order("CASE status WHEN 'executing' THEN 0 ELSE 1 END, version DESC, updated_at DESC").
+		First(&plan).Error
 	return plan, err
 }

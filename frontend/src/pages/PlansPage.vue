@@ -26,7 +26,7 @@ const transitionOpen = ref(false)
 const recommendationOpen = ref(false)
 const editingId = ref<number | null>(null)
 const selected = ref<FeedingPlan | null>(null)
-const transitionAction = ref<'submit' | 'approve' | 'revoke'>('submit')
+const transitionAction = ref<'submit' | 'approve' | 'revoke' | 'finish'>('submit')
 const transitionReason = ref('')
 const startLocal = ref(toLocalInput())
 const endLocal = ref(toLocalInput(new Date(Date.now() + 30 * 86400000)))
@@ -36,9 +36,9 @@ const emptyForm = (): FeedingPlanInput => ({ pondId: 0, name: '', dailyAmountKg:
 const form = reactive<FeedingPlanInput>(emptyForm())
 
 const pendingCount = computed(() => plans.value.filter((item) => item.status === 'pending').length)
-const approvedCount = computed(() => plans.value.filter((item) => item.status === 'approved').length)
-const dailyTotal = computed(() => plans.value.filter((item) => item.status === 'approved').reduce((sum, item) => sum + item.dailyAmountKg, 0))
-const transitionTitle = computed(() => ({ submit: '提交审核', approve: '批准计划', revoke: '撤销计划' }[transitionAction.value]))
+const activeCount = computed(() => plans.value.filter((item) => item.status === 'approved' || item.status === 'executing').length)
+const dailyTotal = computed(() => plans.value.filter((item) => item.status === 'approved' || item.status === 'executing').reduce((sum, item) => sum + item.dailyAmountKg, 0))
+const transitionTitle = computed(() => ({ submit: '提交审核', approve: '批准计划', revoke: '撤销计划', finish: '结束计划' }[transitionAction.value]))
 
 async function load() {
   loading.value = true
@@ -97,7 +97,7 @@ async function save() {
   }
 }
 
-function openTransition(plan: FeedingPlan, action: 'submit' | 'approve' | 'revoke') {
+function openTransition(plan: FeedingPlan, action: 'submit' | 'approve' | 'revoke' | 'finish') {
   selected.value = plan
   transitionAction.value = action
   transitionReason.value = ''
@@ -156,15 +156,15 @@ onMounted(load)
     <section class="metrics-grid">
       <MetricCard label="计划总数" :value="total" :icon="DocumentChecked" />
       <MetricCard label="待审核" :value="pendingCount" :icon="Clock" tone="amber" hint="等待主管复核" />
-      <MetricCard label="已批准" :value="approvedCount" :icon="CircleCheck" tone="blue" />
-      <MetricCard label="已批准日投喂" :value="`${formatNumber(dailyTotal)} kg`" :icon="TrendCharts" tone="green" />
+      <MetricCard label="生效中" :value="activeCount" :icon="CircleCheck" tone="blue" hint="已批准或执行中，可持续安排投喂" />
+      <MetricCard label="生效中日投喂" :value="`${formatNumber(dailyTotal)} kg`" :icon="TrendCharts" tone="green" />
     </section>
     <section class="workspace-panel">
       <div class="panel-toolbar">
         <div class="filters">
           <el-input v-model="params.search" clearable placeholder="搜索计划名称" :prefix-icon="Search" />
           <el-select v-model="params.pondId" placeholder="全部养殖池" clearable><el-option v-for="pond in ponds" :key="pond.id" :label="pond.name" :value="String(pond.id)" /></el-select>
-          <el-select v-model="params.status" placeholder="全部状态" clearable><el-option label="草稿" value="draft" /><el-option label="待审核" value="pending" /><el-option label="已批准" value="approved" /><el-option label="已执行" value="executed" /></el-select>
+          <el-select v-model="params.status" placeholder="全部状态" clearable><el-option label="草稿" value="draft" /><el-option label="待审核" value="pending" /><el-option label="已批准" value="approved" /><el-option label="执行中" value="executing" /><el-option label="已执行" value="executed" /></el-select>
         </div>
         <el-button v-if="canOperate()" type="primary" :icon="Plus" @click="openCreate">新建计划</el-button>
       </div>
@@ -174,12 +174,13 @@ onMounted(load)
         <el-table-column label="饲料 / 阶段" min-width="160"><template #default="{ row }"><div class="primary-cell"><span>{{ row.feedType }}</span><small>{{ row.targetGrowthStage }}</small></div></template></el-table-column>
         <el-table-column label="计划周期" min-width="170"><template #default="{ row }">{{ formatDateTime(row.startDate).slice(0, 10) }} 至 {{ formatDateTime(row.endDate).slice(0, 10) }}</template></el-table-column>
         <el-table-column label="状态" width="105"><template #default="{ row }"><StatusBadge :status="row.status" /></template></el-table-column>
-        <el-table-column v-if="canOperate()" label="操作" min-width="250" fixed="right"><template #default="{ row }">
+        <el-table-column v-if="canOperate()" label="操作" min-width="300" fixed="right"><template #default="{ row }">
           <el-button v-if="row.status === 'draft'" link type="primary" @click="openEdit(row)">编辑</el-button>
           <el-button v-if="row.status === 'draft'" link type="primary" @click="openTransition(row, 'submit')">提交</el-button>
           <el-button v-if="row.status === 'pending' && canReview()" link type="success" @click="openTransition(row, 'approve')">批准</el-button>
           <el-button v-if="(row.status === 'pending' || row.status === 'approved') && canReview()" link type="warning" @click="openTransition(row, 'revoke')">撤销</el-button>
-          <el-button v-if="row.status === 'approved'" link type="primary" @click="generateRecommendation(row)">投喂建议</el-button>
+          <el-button v-if="(row.status === 'approved' || row.status === 'executing') && canReview()" link type="danger" @click="openTransition(row, 'finish')">结束</el-button>
+          <el-button v-if="row.status === 'approved' || row.status === 'executing'" link type="primary" @click="generateRecommendation(row)">投喂建议</el-button>
           <el-popconfirm v-if="row.status === 'draft' && canReview()" title="确认删除该草稿？" @confirm="remove(row)"><template #reference><el-button link type="danger">删除</el-button></template></el-popconfirm>
         </template></el-table-column>
       </el-table>
@@ -202,7 +203,8 @@ onMounted(load)
       <template #footer><el-button @click="editorOpen = false">取消</el-button><el-button type="primary" :loading="saving" @click="save">保存草稿</el-button></template>
     </el-dialog>
     <el-dialog v-model="transitionOpen" :title="transitionTitle" width="500px">
-      <el-alert v-if="transitionAction === 'approve'" title="批准时将校验养殖池状态、最新水质和溶解氧阈值" type="warning" :closable="false" show-icon />
+      <el-alert v-if="transitionAction === 'approve'" title="批准时将校验养殖池状态、最新水质和溶解氧阈值；同一养殖池只能存在一个生效中的计划" type="warning" :closable="false" show-icon />
+      <el-alert v-if="transitionAction === 'finish'" title="结束后计划标记为已执行，周期内将不能再安排投喂；存在待执行或执行中的投喂安排时需先处理完" type="warning" :closable="false" show-icon />
       <el-form-item class="dialog-field" label="变更原因"><el-input v-model="transitionReason" type="textarea" :rows="4" /></el-form-item>
       <template #footer><el-button @click="transitionOpen = false">取消</el-button><el-button type="primary" :loading="saving" @click="transition">确认{{ transitionTitle }}</el-button></template>
     </el-dialog>

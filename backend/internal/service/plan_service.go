@@ -42,9 +42,9 @@ func (s *PlanService) Recommendation(pondID uint, weather string) (dto.FeedingRe
 	if pond.Status != constants.PondStatusActive {
 		return dto.FeedingRecommendation{}, NewError(CodeConflict, "只能为运行中养殖池生成投喂建议")
 	}
-	plan, err := s.repo.LatestApprovedForPond(pondID)
+	plan, err := s.repo.ActiveForPond(pondID)
 	if err == gorm.ErrRecordNotFound {
-		return dto.FeedingRecommendation{}, NewError(CodeConflict, "当前养殖池没有已批准的投喂计划")
+		return dto.FeedingRecommendation{}, NewError(CodeConflict, "当前养殖池没有已批准或执行中的投喂计划")
 	}
 	if err != nil {
 		return dto.FeedingRecommendation{}, WrapError(CodeInternal, "查询已批准计划失败", err)
@@ -61,7 +61,7 @@ func (s *PlanService) Recommendation(pondID uint, weather string) (dto.FeedingRe
 	}
 
 	factor := 1.0
-	reasons := []string{"以已批准计划 v" + fmt.Sprint(plan.Version) + " 为基准"}
+	reasons := []string{"以当前生效计划 v" + fmt.Sprint(plan.Version) + " 为基准"}
 	action := "feed"
 	if reading.RiskLevel == constants.RiskCritical || reading.DissolvedOxygen < plan.MinOxygen {
 		factor = 0
@@ -240,6 +240,13 @@ func (s *PlanService) Approve(id uint, reason string, actor Actor) (model.Feedin
 	if pond.Status != constants.PondStatusActive {
 		return model.FeedingPlan{}, NewError(CodeConflict, "只有运行中养殖池的计划可批准")
 	}
+	active, err := s.repo.ActiveForPond(plan.PondID)
+	if err == nil && active.ID != plan.ID {
+		return model.FeedingPlan{}, NewError(CodeConflict, "该养殖池已有生效中的计划（"+active.Name+"），请先结束或撤销原计划后再批准新计划")
+	}
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return model.FeedingPlan{}, WrapError(CodeInternal, "查询生效中计划失败", err)
+	}
 	latest, err := s.readings.LatestForPond(plan.PondID)
 	if err == gorm.ErrRecordNotFound {
 		return model.FeedingPlan{}, NewError(CodeConflict, "批准前必须有最新水质读数")
@@ -284,6 +291,9 @@ func (s *PlanService) Revoke(id uint, reason string, actor Actor) (model.Feeding
 	if err != nil {
 		return model.FeedingPlan{}, err
 	}
+	if plan.Status == constants.PlanStatusExecuting {
+		return model.FeedingPlan{}, NewError(CodeConflict, "执行中的计划不能撤销，请由主管在计划页结束")
+	}
 	if plan.Status != constants.PlanStatusPending && plan.Status != constants.PlanStatusApproved {
 		return model.FeedingPlan{}, NewError(CodeConflict, "只有待审核或已批准计划可撤销")
 	}
@@ -292,7 +302,7 @@ func (s *PlanService) Revoke(id uint, reason string, actor Actor) (model.Feeding
 		return model.FeedingPlan{}, WrapError(CodeInternal, "检查执行记录失败", err)
 	}
 	if count > 0 {
-		return model.FeedingPlan{}, NewError(CodeConflict, "计划已生成执行记录，不能撤销")
+		return model.FeedingPlan{}, NewError(CodeConflict, "计划已生成执行记录，不能撤销，请由主管在计划页结束")
 	}
 	before := plan
 	plan.Status = constants.PlanStatusDraft
@@ -303,6 +313,38 @@ func (s *PlanService) Revoke(id uint, reason string, actor Actor) (model.Feeding
 		return model.FeedingPlan{}, WrapError(CodeInternal, "撤销投喂计划失败", err)
 	}
 	return plan, s.audit.Record(actor, "revoke", "feeding_plan", plan.ID, before, plan, reason)
+}
+
+func (s *PlanService) Finish(id uint, reason string, actor Actor) (model.FeedingPlan, error) {
+	if !s.transactional {
+		var result model.FeedingPlan
+		err := s.withinTransaction(func(scoped *PlanService) error {
+			var inner error
+			result, inner = scoped.Finish(id, reason, actor)
+			return inner
+		})
+		return result, err
+	}
+	plan, err := s.Get(id)
+	if err != nil {
+		return model.FeedingPlan{}, err
+	}
+	if plan.Status != constants.PlanStatusApproved && plan.Status != constants.PlanStatusExecuting {
+		return model.FeedingPlan{}, NewError(CodeConflict, "只有已批准或执行中的计划可以结束")
+	}
+	openCount, err := s.repo.OpenExecutionCount(id)
+	if err != nil {
+		return model.FeedingPlan{}, WrapError(CodeInternal, "检查待执行记录失败", err)
+	}
+	if openCount > 0 {
+		return model.FeedingPlan{}, NewError(CodeConflict, "仍有待执行或执行中的投喂安排，请完成、取消或删除后再结束计划")
+	}
+	before := plan
+	plan.Status = constants.PlanStatusExecuted
+	if err := s.repo.Save(&plan); err != nil {
+		return model.FeedingPlan{}, WrapError(CodeInternal, "结束投喂计划失败", err)
+	}
+	return plan, s.audit.Record(actor, "finish", "feeding_plan", plan.ID, before, plan, reason)
 }
 
 func (s *PlanService) Delete(id uint, actor Actor) error {

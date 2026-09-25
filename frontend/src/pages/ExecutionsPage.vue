@@ -36,7 +36,7 @@ const completion = reactive({ actualAmountKg: 0, oxygenSnapshot: 6, feedback: ''
 const scheduledCount = computed(() => executions.value.filter((item) => item.status === 'scheduled').length)
 const runningCount = computed(() => executions.value.filter((item) => item.status === 'running').length)
 const completedAmount = computed(() => executions.value.filter((item) => item.status === 'completed').reduce((sum, item) => sum + item.actualAmountKg, 0))
-const availablePlans = computed(() => plans.value.filter((plan) => plan.status === 'approved' && (!form.pondId || plan.pondId === form.pondId)))
+const availablePlans = computed(() => plans.value.filter((plan) => (plan.status === 'approved' || plan.status === 'executing') && (!form.pondId || plan.pondId === form.pondId)))
 
 async function load() {
   loading.value = true
@@ -58,7 +58,7 @@ async function load() {
 }
 
 function openCreate() {
-  const firstPlan = plans.value.find((item) => item.status === 'approved')
+  const firstPlan = plans.value.find((item) => item.status === 'approved' || item.status === 'executing')
   Object.assign(form, {
     pondId: firstPlan?.pondId || 0, feedingPlanId: firstPlan?.id || 0, plannedAmountKg: firstPlan ? firstPlan.dailyAmountKg / firstPlan.frequencyPerDay : 0, weather: '晴朗，微风',
   })
@@ -75,7 +75,7 @@ function onPlanChange(planId: number) {
 
 async function create() {
   if (!form.pondId || !form.feedingPlanId || form.plannedAmountKg <= 0) {
-    ElMessage.warning('请选择已批准计划并填写数量')
+    ElMessage.warning('请选择已批准或执行中的计划并填写数量')
     return
   }
   saving.value = true
@@ -120,7 +120,7 @@ async function complete() {
   saving.value = true
   try {
     await executionApi.complete(target.value.id, { ...completion })
-    ElMessage.success('执行反馈已提交，计划状态已同步')
+    ElMessage.success('执行反馈已提交，计划在周期内保持执行中')
     completeOpen.value = false
     await load()
   } catch (error) {
@@ -187,10 +187,10 @@ onMounted(load)
       <div class="pagination"><el-pagination v-model:current-page="params.page" layout="total, prev, pager, next" :total="total" :page-size="20" /></div>
     </section>
     <el-dialog v-model="editorOpen" title="安排投喂执行" width="620px">
-      <el-alert title="仅可选择已批准计划；保存时将检查 24 小时内水质" type="info" :closable="false" show-icon />
+      <el-alert title="仅可选择已批准或执行中的计划；计划在整个周期内可持续安排投喂，保存时将检查 24 小时内水质" type="info" :closable="false" show-icon />
       <el-form label-position="top" class="form-grid form-with-alert">
         <el-form-item label="养殖池"><el-select v-model="form.pondId" @change="form.feedingPlanId = 0"><el-option v-for="pond in ponds.filter((item) => item.status === 'active')" :key="pond.id" :label="pond.name" :value="pond.id" /></el-select></el-form-item>
-        <el-form-item label="已批准计划"><el-select v-model="form.feedingPlanId" @change="onPlanChange"><el-option v-for="plan in availablePlans" :key="plan.id" :label="`${plan.name} · v${plan.version}`" :value="plan.id" /></el-select></el-form-item>
+        <el-form-item label="生效中计划"><el-select v-model="form.feedingPlanId" @change="onPlanChange"><el-option v-for="plan in availablePlans" :key="plan.id" :label="`${plan.name} · v${plan.version}`" :value="plan.id" /></el-select></el-form-item>
         <el-form-item label="执行时间"><el-date-picker v-model="scheduledLocal" type="datetime" value-format="YYYY-MM-DDTHH:mm" /></el-form-item>
         <el-form-item label="计划数量（kg）"><el-input-number v-model="form.plannedAmountKg" :min="0.1" :step="1" /></el-form-item>
         <el-form-item label="天气窗口" class="form-span"><el-input v-model="form.weather" placeholder="例：晴朗，微风" /></el-form-item>

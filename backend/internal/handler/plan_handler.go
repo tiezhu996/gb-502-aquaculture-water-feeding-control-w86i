@@ -102,6 +102,10 @@ func (h *PlanHandler) Revoke(c *gin.Context) {
 	h.executeTransition(c, "revoke")
 }
 
+func (h *PlanHandler) Finish(c *gin.Context) {
+	h.executeTransition(c, "finish")
+}
+
 func (h *PlanHandler) executeTransition(c *gin.Context, action string) {
 	id, ok := parseID(c)
 	if !ok {
@@ -121,6 +125,8 @@ func (h *PlanHandler) executeTransition(c *gin.Context, action string) {
 		result, err = h.service.Approve(id, input.Reason, actorFromContext(c))
 	case "revoke":
 		result, err = h.service.Revoke(id, input.Reason, actorFromContext(c))
+	case "finish":
+		result, err = h.service.Finish(id, input.Reason, actorFromContext(c))
 	}
 	if err != nil {
 		respondError(c, err)

@@ -178,21 +178,20 @@ func (s *ExecutionService) Complete(id uint, input dto.CompleteExecutionInput, a
 	if err := s.repo.Save(&execution); err != nil {
 		return model.ControlExecution{}, WrapError(CodeInternal, "完成执行记录失败", err)
 	}
-	plan, err := s.plans.Get(execution.FeedingPlanID)
+	// The plan stays in effect for its whole cycle: the first completed feeding
+	// moves an approved plan into "executing", but it never closes itself. Only
+	// a manager can finish the plan on the plans page.
+	plan, err := s.plans.GetForUpdate(execution.FeedingPlanID)
 	if err != nil {
 		return model.ControlExecution{}, WrapError(CodeInternal, "查询关联计划失败", err)
 	}
-	openCount, err := s.repo.CountOpenForPlanExcluding(plan.ID, execution.ID)
-	if err != nil {
-		return model.ControlExecution{}, WrapError(CodeInternal, "检查计划待执行记录失败", err)
-	}
-	if plan.Status == constants.PlanStatusApproved && openCount == 0 {
+	if plan.Status == constants.PlanStatusApproved {
 		planBefore := plan
-		plan.Status = constants.PlanStatusExecuted
+		plan.Status = constants.PlanStatusExecuting
 		if err := s.plans.Save(&plan); err != nil {
 			return model.ControlExecution{}, WrapError(CodeInternal, "更新计划执行状态失败", err)
 		}
-		if err := s.audit.Record(actor, "execute", "feeding_plan", plan.ID, planBefore, plan, "首次投喂执行已完成"); err != nil {
+		if err := s.audit.Record(actor, "execute", "feeding_plan", plan.ID, planBefore, plan, "首次投喂执行已完成，计划进入执行中"); err != nil {
 			return model.ControlExecution{}, err
 		}
 	}
@@ -236,8 +235,8 @@ func (s *ExecutionService) validateExecution(pondID, planID uint, amount float64
 	if plan.PondID != pondID {
 		return model.FeedingPlan{}, model.Pond{}, model.WaterReading{}, NewError(CodeValidation, "投喂计划与养殖池不匹配")
 	}
-	if plan.Status != constants.PlanStatusApproved {
-		return model.FeedingPlan{}, model.Pond{}, model.WaterReading{}, NewError(CodeConflict, "只能使用已批准计划安排执行")
+	if plan.Status != constants.PlanStatusApproved && plan.Status != constants.PlanStatusExecuting {
+		return model.FeedingPlan{}, model.Pond{}, model.WaterReading{}, NewError(CodeConflict, "只能使用已批准或执行中的计划安排执行")
 	}
 	if scheduledAt.Before(plan.StartDate) || scheduledAt.After(plan.EndDate.Add(24*time.Hour)) {
 		return model.FeedingPlan{}, model.Pond{}, model.WaterReading{}, NewError(CodeValidation, "执行时间必须在计划周期内")

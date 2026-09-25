@@ -30,14 +30,15 @@ func (s PondStatus) Valid() bool {
 type PlanStatus string
 
 const (
-	PlanStatusDraft    PlanStatus = "draft"
-	PlanStatusPending  PlanStatus = "pending"
-	PlanStatusApproved PlanStatus = "approved"
-	PlanStatusExecuted PlanStatus = "executed"
+	PlanStatusDraft     PlanStatus = "draft"
+	PlanStatusPending   PlanStatus = "pending"
+	PlanStatusApproved  PlanStatus = "approved"
+	PlanStatusExecuting PlanStatus = "executing"
+	PlanStatusExecuted  PlanStatus = "executed"
 )
 
 func (s PlanStatus) Valid() bool {
-	return s == PlanStatusDraft || s == PlanStatusPending || s == PlanStatusApproved || s == PlanStatusExecuted
+	return s == PlanStatusDraft || s == PlanStatusPending || s == PlanStatusApproved || s == PlanStatusExecuting || s == PlanStatusExecuted
 }
 
 type Role string
